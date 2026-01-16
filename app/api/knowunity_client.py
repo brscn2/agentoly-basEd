@@ -141,14 +141,22 @@ class KnowunityClient:
         )
         
         async with httpx.AsyncClient() as client:
+            # Serialize to JSON format expected by API
+            request_data = batch.model_dump(mode="json")
             response = await client.post(
                 f"{self.base_url}/evaluate/mse",
                 headers=self._headers,
-                json=batch.model_dump(mode="json"),
+                json=request_data,
                 timeout=60.0
             )
+            if response.status_code != 200:
+                # Log the error response for debugging
+                error_detail = response.text
+                print(f"API Error {response.status_code}: {error_detail}")
+                print(f"Request data: {request_data}")
             response.raise_for_status()
-            return MSEResult(**response.json())
+            response_json = response.json()
+            return MSEResult(**response_json)
     
     async def evaluate_tutoring(
         self,

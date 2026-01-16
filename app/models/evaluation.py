@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 
 class Prediction(BaseModel):
@@ -17,7 +17,7 @@ class MSEResult(BaseModel):
     mse_score: float
     num_predictions: int
     submission_number: int
-    submissions_remaining: int
+    submissions_remaining: Optional[int] = None
 
 
 class TutoringEvaluationRequest(BaseModel):
@@ -28,4 +28,4 @@ class TutoringEvaluationResult(BaseModel):
     score: float
     num_conversations: int
     submission_number: int
-    submissions_remaining: int
+    submissions_remaining: Optional[int] = None

@@ -30,6 +30,17 @@ def infer_understanding(state: TutoringState) -> Dict[str, Any]:
     student_profile = state.get("student_profile", {})
     topic_info = state.get("topic_info", {})
     
+    # Safety check: don't assess if no student responses yet
+    student_responses = [msg for msg in messages if msg.get("role") == "student"]
+    if len(student_responses) == 0:
+        # Return previous values or None if no previous assessment
+        return {
+            "understanding_level": state.get("understanding_level"),
+            "understanding_confidence": state.get("understanding_confidence"),
+            "understanding_evidence": state.get("understanding_evidence", ""),
+            "should_lock": False
+        }
+    
     # Filter messages to only include early student responses (before significant tutoring)
     # Look for the first few student responses and tutor messages before extensive teaching
     filtered_messages = []

@@ -11,6 +11,7 @@ class TutoringState(TypedDict):
     understanding_level: Optional[int]  # 1-5, inferred from conversation
     understanding_confidence: Optional[float]  # Confidence in understanding assessment (0.0-1.0)
     understanding_evidence: Optional[str]  # Evidence supporting the understanding level assessment
+    understanding_level_locked: bool  # Whether the understanding level has been locked
     student_profile: Dict[str, Any]  # name, grade_level, etc.
     topic_info: Dict[str, Any]  # topic name, subject, etc.
     turn_count: int

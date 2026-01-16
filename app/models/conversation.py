@@ -13,7 +13,7 @@ class StartConversationResponse(BaseModel):
     student_id: UUID
     topic_id: UUID
     max_turns: int
-    conversations_remaining: int
+    conversations_remaining: Optional[int] = None
 
 
 class InteractionRequest(BaseModel):

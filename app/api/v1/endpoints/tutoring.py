@@ -24,9 +24,10 @@ class StartTutoringRequest(BaseModel):
 
 class StartTutoringResponse(BaseModel):
     conversation_id: str
-    student_info: Dict[str, Any]
-    topic_info: Dict[str, Any]
-    limits: Dict[str, Any]
+    student_id: str
+    topic_id: str
+    max_turns: int
+    conversations_remaining: Optional[int] = None
 
 
 class InteractRequest(BaseModel):
@@ -35,12 +36,11 @@ class InteractRequest(BaseModel):
 
 
 class InteractResponse(BaseModel):
+    conversation_id: str
+    interaction_id: str
     student_response: str
-    turn_count: int
-    understanding_level: Optional[int]
-    conversation_history: List[Dict[str, Any]]
-    conversation_ended: bool
-    tutor_message: str
+    turn_number: int
+    is_complete: bool
 
 
 class SubmitPredictionsRequest(BaseModel):
@@ -97,6 +97,7 @@ async def start_tutoring(request: StartTutoringRequest):
             "understanding_level": None,
             "understanding_confidence": None,
             "understanding_evidence": None,
+            "understanding_level_locked": False,
             "student_profile": {
                 "name": student.name,
                 "grade_level": student.grade_level
@@ -119,22 +120,10 @@ async def start_tutoring(request: StartTutoringRequest):
         
         return StartTutoringResponse(
             conversation_id=conversation_id,
-            student_info={
-                "id": student.id,
-                "name": student.name,
-                "grade_level": student.grade_level
-            },
-            topic_info={
-                "id": topic.id,
-                "name": topic.name,
-                "subject_id": topic.subject_id,
-                "subject_name": topic.subject_name,
-                "grade_level": topic.grade_level
-            },
-            limits={
-                "conversations_remaining": start_response.conversations_remaining,
-                "max_turns": start_response.max_turns
-            }
+            student_id=request.student_id,
+            topic_id=request.topic_id,
+            max_turns=start_response.max_turns,
+            conversations_remaining=start_response.conversations_remaining or 0
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error starting conversation: {str(e)}")
@@ -162,10 +151,14 @@ async def interact_with_student(request: InteractRequest):
         # Generate tutor message if not provided
         tutor_message = request.tutor_message
         if not tutor_message:
-            # Infer understanding if needed
-            if state.get("understanding_level") is None:
+            # Infer understanding if not locked and not yet assessed
+            if not state.get("understanding_level_locked", False) and state.get("understanding_level") is None:
                 understanding_update = infer_understanding(state)
                 state.update(understanding_update)
+                
+                # Lock understanding level if agent decides to
+                if understanding_update.get("should_lock", False):
+                    state["understanding_level_locked"] = True
             
             # Generate tutoring message
             tutoring_update = generate_tutoring(state)
@@ -189,10 +182,14 @@ async def interact_with_student(request: InteractRequest):
         state["conversation_ended"] = interaction_response.is_complete
         state["tutor_message"] = tutor_message
         
-        # Update understanding level periodically
-        if state.get("turn_count", 0) % 2 == 0 or state.get("understanding_level") is None:
+        # Only assess understanding if not locked and not yet assessed
+        if not state.get("understanding_level_locked", False) and state.get("understanding_level") is None:
             understanding_update = infer_understanding(state)
             state.update(understanding_update)
+            
+            # Lock understanding level if agent decides to
+            if understanding_update.get("should_lock", False):
+                state["understanding_level_locked"] = True
         
         # Store updated state
         conversation_states[conversation_id] = state
@@ -213,12 +210,11 @@ async def interact_with_student(request: InteractRequest):
         )
         
         return InteractResponse(
+            conversation_id=conversation_id,
+            interaction_id=str(interaction_response.interaction_id),
             student_response=interaction_response.student_response,
-            turn_count=interaction_response.turn_number,
-            understanding_level=state.get("understanding_level"),
-            conversation_history=messages,
-            conversation_ended=interaction_response.is_complete,
-            tutor_message=tutor_message
+            turn_number=interaction_response.turn_number,
+            is_complete=interaction_response.is_complete
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during interaction: {str(e)}")

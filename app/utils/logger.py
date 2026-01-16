@@ -39,9 +39,9 @@ class ConversationLogger:
             "metadata": metadata or {}
         }
         
-        # Append to JSONL file
+        # Append to JSONL file with pretty formatting
         with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+            f.write(json.dumps(log_entry, ensure_ascii=False, indent=2) + "\n")
     
     def get_conversations(
         self,

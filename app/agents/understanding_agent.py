@@ -1,0 +1,90 @@
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import JsonOutputParser
+from app.graph.state import TutoringState
+from app.config import settings
+from app.prompts.understanding import get_understanding_prompt
+from typing import Dict, Any
+
+
+# Initialize LLM
+llm = ChatOpenAI(
+    model=settings.openai_model,
+    temperature=0.3,
+    api_key=settings.openai_api_key
+)
+
+
+def infer_understanding(state: TutoringState) -> Dict[str, Any]:
+    """
+    Infer student understanding level (1-5) from conversation history.
+    
+    Understanding Levels:
+    1 -> Struggling, needs fundamentals
+    2 -> Below grade, frequent mistakes
+    3 -> At grade, core concepts ok
+    4 -> Above grade, occasional gaps
+    5 -> Advanced, ready for more
+    """
+    messages = state.get("messages", [])
+    student_profile = state.get("student_profile", {})
+    topic_info = state.get("topic_info", {})
+    
+    # Build conversation history string
+    conversation_history = "\n".join([
+        f"{msg.get('role', 'unknown').upper()}: {msg.get('content', '')}"
+        for msg in messages
+    ])
+    
+    prompt = get_understanding_prompt()
+    
+    parser = JsonOutputParser()
+    chain = prompt | llm | parser
+    
+    # Get previous values from state as fallbacks
+    previous_level = state.get("understanding_level")
+    previous_confidence = state.get("understanding_confidence", 0.5)
+    previous_evidence = state.get("understanding_evidence", "")
+    
+    try:
+        result = chain.invoke({
+            "student_name": student_profile.get("name", "Unknown"),
+            "grade_level": student_profile.get("grade_level", "Unknown"),
+            "topic_name": topic_info.get("name", "Unknown"),
+            "subject_name": topic_info.get("subject_name", "Unknown"),
+            "conversation_history": conversation_history or "No conversation yet."
+        })
+        
+        level = result.get("level")
+        confidence = result.get("confidence")
+        evidence = result.get("evidence", "")
+        
+        # Validate level is between 1-5, use previous level if invalid
+        if not isinstance(level, int) or level < 1 or level > 5:
+            if previous_level is not None:
+                level = previous_level
+            else:
+                # Only default to 3 if we have no previous level
+                level = 3
+        
+        # Use previous confidence if new one is invalid or missing
+        if confidence is None or not isinstance(confidence, (int, float)) or confidence < 0.0 or confidence > 1.0:
+            confidence = previous_confidence
+        
+        return {
+            "understanding_level": level,
+            "understanding_confidence": confidence,
+            "understanding_evidence": evidence or previous_evidence
+        }
+    except Exception as e:
+        # Fallback: if LLM fails, use previous values if available
+        print(f"Error inferring understanding: {e}")
+        
+        # Use previous level if available, otherwise default to 3
+        fallback_level = previous_level if previous_level is not None else 3
+        fallback_confidence = previous_confidence if previous_confidence is not None else 0.3
+        
+        return {
+            "understanding_level": fallback_level,
+            "understanding_confidence": fallback_confidence,
+            "understanding_evidence": previous_evidence or "Unable to assess - using previous/default level"
+        }
